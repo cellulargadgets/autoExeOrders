@@ -8,8 +8,12 @@
 
 ; ## TODO LIST ## ;
 
+
+; Stamp.com does not recognize entire state name. needs to appreviate
 ; snake skin with clip would header snake skin only.
 ; ambigous address
+
+
 ; when buy.com doesn't have any order the window doesn't close
 ; completed order Log
 
@@ -53,11 +57,11 @@ Start_Programs()
 
 Sleep(3000)
 
-ieA()
-ieB()
+;ieA()
+;ieB()
 ieP1()
-ieP2()
-ieP3()
+;ieP2()
+;ieP3()
 
 
 Func ieA ()
@@ -1271,6 +1275,639 @@ Func processeBuycomOrders($BoIE, $OpenOrdersArray)
 
 EndFunc
 
+Func retrieveTrackingID($name)
+	
+	Local $bodyTxt="", $trackingID=""
+	
+	WinActivate("Stamps.com Pro")
+	ControlClick("Stamps.com Pro", "", 32551)
+		
+	Sleep(3000)
+							
+	$bodyTxt = ""
+
+	WinWaitActive("Stamps.com Pro")
+	Sleep(2000)
+	$trackingIE = _IEAttach("Stamps.com Pro", "Embedded")
+	_IELoadWait($trackingIE)
+							
+				
+	For $k = 0 to 20
+		 $bodyTxt = _IEBodyReadText($trackingIE)
+						
+		If StringInStr ($bodyTxt, $name) <> 0 Then
+			$trackingTable = _IETableGetCollection($trackingIE, 1)
+			$trackingData = _IETableWriteToArray($trackingTable, True)
+				If StringInStr($trackingData[1][4], $name) <> 0 Then
+					$trackingID = $trackingData[1][6]
+					ExitLoop
+				EndIf
+									
+			ControlClick("Stamps.com Pro", "", "[CLASS:ToolbarWindow32; INSTANCE:1]", "Primary", 1, 124,15 ) 
+			_IELoadWait($trackingIE)
+			Sleep(15000)
+		EndIf
+								
+		If $k > 10 Then
+			ControlClick("Stamps.com Pro", "", "[CLASS:ToolbarWindow32; INSTANCE:1]", "Primary", 1, 124,15 ) 
+			_IELoadWait($trackingIE)					
+			Sleep(100000)
+		EndIf
+
+	Next
+						
+	If $k > 19 Then
+		$body &= "Address Name " & $addressName & "Cannot be found on Stamp.com table; no tracking info entered for Paypal "& $acct & @CR
+	EndIf
+						
+	Sleep(2000)
+	ControlClick("Stamps.com Pro", "", 32513)
+	Sleep(2000)
+	
+	Return $trackingID
+	
+EndFunc
+
+Func paypalMultipleOrdersAddTrackingPrintPacking($oIE, $name, $trackingID, $multipleOrders, $itemArray, $packagingType, $domestic=True)
+	
+
+	
+	WinActivate("PayPal Website Payment Details")
+	WinWaitActive("PayPal Website Payment Details")
+
+	If $domestic = False Then
+		$trackingID &= "None-tracking, custom declaration# "
+	EndIf
+
+		_IELinkClickByText($oIE, "Add Tracking Info")								
+		_IELoadWait($oIE)
+
+		Local $oInput = _IEGetObjByName($oIE, "shipping_status")
+		_IEFormElementOptionselect($oInput, "S" , 1, "byValue")
+									
+		$oInput = _IEGetObjByName($oIE, "track_num")
+		_IEFormElementSetValue($oInput, $trackingID)
+									
+		$oInput = _IEGetObjByName($oIE, "shipping_co_id")
+		_IEFormElementOptionselect($oInput, "1" , 1, "byValue")
+									
+		MsgBox(0, "okay", "okay?")
+									
+		$oInput = _IEGetObjByName($oIE, "Save")
+		_IEAction($oInput, "click")
+									
+		_IELoadWait($oIE)
+
+		_IELinkClickByText($oIE, "Print Packing Slip")
+						
+						
+		WinWaitActive("Packing Slip - PayPal - Windows Internet Explorer")
+		sleep(2000)
+		
+		printPaypalPackingSlip($itemArray ,$packaging)
+							
+
+		$oInput = _IEGetObjByName($oIE, "cancel.x")
+		_IEAction($oInput, "click")							
+		_IELoadWait($oIE)
+		
+		
+		_IELinkClickByText($oIE, "History")		
+		_IELoadWait($oIE)
+
+
+	For $numClick=2 To $multipleOrders 
+		
+		$oLinks = _IELinkGetCollection($oIE)
+		$clickCount=1
+		For $oLink In $oLinks	
+						
+			If StringInStr($oLink.innerText, $name) <> 0 And StringInStr($oLink.innerText, "Details") <> 0  Then
+				;MsgBox(0,$clickCount&" - "&$numClick,$oLink.innerText)
+				If $numClick = $clickCount Then
+					;MsgBox(0,"$clickCount",$clickCount)
+					_IEAction($oLink, "click")
+					ExitLoop
+				EndIf
+				
+				$clickCount+=1
+				
+			EndIf
+		Next	
+			
+
+			_IELinkClickByText($oIE, "Add Tracking Info")								
+			_IELoadWait($oIE)
+
+			Local $oInput = _IEGetObjByName($oIE, "shipping_status")
+			_IEFormElementOptionselect($oInput, "S" , 1, "byValue")
+										
+			$oInput = _IEGetObjByName($oIE, "track_num")
+			_IEFormElementSetValue($oInput, $trackingID)
+										
+			$oInput = _IEGetObjByName($oIE, "shipping_co_id")
+			_IEFormElementOptionselect($oInput, "1" , 1, "byValue")
+										
+			MsgBox(0, "okay", "okay?")
+										
+			$oInput = _IEGetObjByName($oIE, "Save")
+			_IEAction($oInput, "click")
+										
+			_IELoadWait($oIE)
+
+
+		_IELinkClickByText($oIE, "History")		
+		_IELoadWait($oIE)		
+		
+		
+	Next
+
+
+EndFunc
+
+Func paypayOrdersProceed($oIE, $name, $orderNumber, $flagnote="")
+
+	Local $array, $itemArray[10][8] ;; itemNum_itemName_qty_price
+	Local $itemCount=0, $trackingID=""
+
+	For $numClick=1 To $orderNumber 
+		;MsgBox(0,$orderNumber,$numClick)
+		
+		$oLinks = _IELinkGetCollection($oIE)
+		$clickCount=1
+		For $oLink In $oLinks	
+			
+			
+			If StringInStr($oLink.innerText, $name) <> 0 And StringInStr($oLink.innerText, "Details") <> 0  Then
+				;MsgBox(0,$clickCount&" - "&$numClick,$oLink.innerText)
+				If $numClick = $clickCount Then
+					;MsgBox(0,"$clickCount",$clickCount)
+					_IEAction($oLink, "click")
+					ExitLoop
+				EndIf
+				
+				$clickCount+=1
+				
+			EndIf
+		Next
+	
+		_IELoadWait($oIE)
+
+		$transTable = _IETableGetCollection ($oIE, 3)
+		$transTableData = _IETableWriteToArray ($transTable, True)
+							
+		;_ArrayDisplay($transTableData)
+		$transSplit = StringSplit($transTableData[1][0], "#", 2)
+		;_ArrayDisplay($transSplit)
+		$transactionid = StringStripWS($transSplit[1], 8)
+		$transactionid = StringTrimRight($transactionid, 1)
+	
+
+		If define_skip($transactionid) = True Then
+			$body &= "Paypal "&$acct&" transaction id: "&$transactionid&" skipped"&@CR
+
+		Else
+
+		$htmlbody = _IEBodyReadText($oIE)
+		
+			If StringInStr($htmlbody, "iOffer") Then
+				$body &= "iOffer Transaction Exist" & @CR
+				;_Log($timestamp &@TAB& "PayPal " & $acct & " - iOffer Transaction Exist"& @CR)
+				$back = _IEGetObjByName($oIE, "cancel.x")
+				_IEAction($back, "click")
+				;_IEWaitForTitle($oIE, "Account overview - PayPal - Windows Internet Explorer")
+				_IELinkClickByText($oIE, "History")		
+				;_IEWaitForTitle($oIE, "History - PayPal - Windows Internet Explorer")
+					
+			
+			ElseIf StringInStr($htmlbody, "Atomic Mall Order") Then
+				$body &= "Atomic Mall Order Exist" & @CR
+				;_Log($timestamp &@TAB& "PayPal " & $acct & " - Atomic Mall Order Exist"& @CR)
+				$back = _IEGetObjByName($oIE, "cancel.x")
+				_IEAction($back, "click")
+				;_IEWaitForTitle($oIE, "Account overview - PayPal - Windows Internet Explorer")
+				_IELinkClickByText($oIE, "History")		
+				;_IEWaitForTitle($oIE, "History - PayPal - Windows Internet Explorer")			
+
+			Else
+				
+
+				$itemTable = _IETableGetCollection ($oIE, 5)
+				$itemTableData = _IETableWriteToArray ($itemTable, True)
+				
+				;_ArrayDisplay($itemTableData)
+				
+				
+				$itemNameSplit=""
+				;$isNumber=0
+					For $i=1 to UBound($itemTableData)-1
+								
+						;MsgBox(0,$i, $itemTableData[$i][1])
+						
+						If StringInStr($itemTableData[$i][0], "Amount") = 0 And StringInStr($itemTableData[$i][1], "Coupon Discount") = 0 And StringInStr($itemTableData[$i][1], "Coupon") = 0 Then
+							$itemArray[$itemCount][2] = $itemTableData[$i][0] ;; qty
+							$itemArray[$itemCount][5] = $itemTableData[$i][3] ;; price
+							$itemNameSplit = StringSplit($itemTableData[$i][1], "#", 2)
+							;MsgBox(0,"StringInStr($itemTableData[$i][1])", StringInStr($itemTableData[$i][1], "Coupon Discount"))
+							;_ArrayDisplay($itemNameSplit)
+							
+							$itemArray[$itemCount][0] = StringStripWS($itemNameSplit[1], 8) ;; item number
+							$itemArray[$itemCount][1] = StringTrimRight($itemNameSplit[0], 5) ;; item name
+							$itemCount+=1
+						EndIf
+						;_ArrayDisplay($itemArray)
+					Next
+		
+			;_ArrayDisplay($itemArray)
+		
+			_IELinkClickByText($oIE, "History")		
+			_IELoadWait($oIE)			
+			
+			EndIf ;; End of iOffer if and Atomic Mall if
+		
+		EndIf ;; End of define Skip if
+		
+	
+	Next		
+;;;;;;;;;;;; end building item table ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+			$found = True
+				
+			;; define existence 
+					
+			For $i=0 To UBound($itemArray)-1
+						
+				If $itemArray[$i][0] <> "" Then
+							
+					If db_item_title_exist($itemArray[$i][1]) = True Then
+						If db_item_check_stock($itemArray[$i][1]) <> True Then
+							$found=False
+						EndIf
+					Else
+						$found=False
+						add_to_DB($itemArray[$i][1], "name", "ebay", $itemArray[$i][0], "item_number")
+					
+					EndIf
+				EndIf
+			Next
+					
+					
+			;;define per item weight
+			$proceed=True
+			$packagingType = ""
+			$itemWeight = 0
+			$itemSKU = ""
+			$itemType = ""
+			$arraySize=0
+			$emptyFound_packagingType=False
+			$emptyFound_itemWeight=False
+			$emptyFound_itemType=False
+			$emptyFound_itemSKU=False
+
+			If $flagnote <> "" Then
+				$approval = flagged($flagnote, $transactionid, $name)
+						;MsgBox(0,"approval",$approval)
+				
+				If $approval <> True Then
+					$proceed = False
+				EndIf
+			EndIf
+				  
+				  ;; $itemArray[0] - item number
+				  ;; $itemArray[1] - item name
+				  ;; $itemArray[2] - qty
+				  ;; $itemArray[3] - weight
+				  ;; $itemArray[4] - package type
+				  ;; $itemArray[5] - price
+				  ;; $itemArray[6] - item type
+				  ;; $itemArray[7] - item sku				  
+				  
+			 For $k=0 To UBound($itemArray)-1
+				If $itemArray[$k][0] <> "" Then
+					$packagingType = retrievePackagingType($itemArray[$k][1], "ebay")  
+					;MsgBox(0,"$packagingType",$packagingType)
+					If $packagingType = "" Then
+					   $proceed = False
+					   $emptyFound_packagingType=True
+					Else
+					   $itemArray[$k][4] = $packagingType
+					EndIf
+						
+					$itemWeight = retrieveWeight($itemArray[$k][1], "ebay")
+					If $itemWeight = 0 Then
+					   $proceed = False
+					   $emptyFound_itemWeight= True
+							  
+					Else
+					   $itemArray[$k][3] = $itemWeight			   
+					EndIf
+							
+					$itemType = retrieveItemType($itemArray[$k][1], "ebay")
+					If $itemType = "" Then
+					   $proceed = False
+					   $emptyFound_itemType=True
+							  
+					Else					   
+					   $itemArray[$k][6] = $itemType
+					EndIf   
+
+					$itemSKU = retrieveSKU($itemArray[$k][1], "ebay")
+					If $itemSKU = "" Then
+					   $proceed = False
+					   $emptyFound_itemSKU=True
+					Else					   
+					   $itemArray[$k][7] = $itemSKU
+
+					EndIf
+													
+				If StringInStr($itemArray[$k][1], "Purse") = 0 Or StringInStr ($itemArray[$k][1], "purse") = 0 Then 
+					If  $emptyFound_packagingType=True Then							
+						$body &= $itemArray[$k][1] & "itemWeight is empty"
+					EndIf
+					If $emptyFound_itemWeight= True Then
+						$body &= $itemArray[$k][1] & "packagingType is empty"
+					EndIf
+					If $emptyFound_itemType=True Then
+						$body &= $itemArray[$k][1] & "itemSKU is empty"
+					EndIf
+					If $emptyFound_itemSKU=True Then
+						$body &= $itemArray[$k][1] & "itemType is empty"
+						EndIf
+					EndIf
+						$arraySize += 1
+							
+
+				EndIf
+						;MsgBox(0,"$k",$k)
+			 Next
+
+				  
+				  $itemString=""
+				  
+				  
+					 If $arraySize > 1 Then
+						 ;MsgBox(0, "$arraySize > 1","true")
+						Local $packageArray[$arraySize][2]
+						$count=0
+
+						For $m=0 To UBound($itemArray)-1
+							If $itemArray[$m][0] <> "" Then
+							   If $packageArray[0][0] = "" Then
+								  $packageArray[0][0] = $itemArray[$m][4]
+								  $packageArray[0][1] = $itemArray[$m][2]
+								  $count+=1
+								  
+							   Else
+								  $found = False
+								  For $n=0 To UBound($packageArray)-1
+									 
+									 If $packageArray[$n][0] = $itemArray[$m][4] Then
+										$packageArray[$n][1]+=1
+										$found = True
+									 EndIf
+								  
+								  Next
+								  
+								  If $found <> True Then
+									 $packageArray[$count][0] = $itemArray[$m][4]	
+									 $packageArray[$count][1] = $itemArray[$m][2]
+									 $count+=1
+								  EndIf
+							   
+								EndIf
+							EndIf
+						Next
+						
+						;_ArrayDisplay($itemArray)
+						_ArraySort($packageArray)
+						;_ArrayDisplay($packageArray)
+						
+						For $k=0 To Ubound($packageArray)-1
+						   If $packageArray[$k][0] <> "" Then
+							  $itemString &= $packageArray[$k][0]
+							  $itemString &= $packageArray[$k][1]
+						   EndIf
+						Next
+					
+						;_ArrayDisplay($packageArray)
+						
+						For $i=0 To UBound($packageArray)-1
+							For $j=0 To UBound($packageArray,2)-1
+								$packageArray[$i][$j] = ""
+							Next
+						Next
+					
+					Else
+					;MsgBox(0, "$arraySize > 1","else")
+						If $itemArray[0][0] <> "" Then
+							;_ArrayDisplay($itemArray)
+							$itemString = $itemArray[0][4]
+							$itemString &= $itemArray[0][2]
+						EndIf	
+					EndIf
+
+					
+				
+				  ;MsgBox(0,"$itemString",$itemString)
+				  
+				  ;_ArrayDisplay($packageArray)
+				  ;;package string existence
+				  $packaging = ""
+				  $packaging = define_packaging($itemString) 
+
+				  ;;package string weight
+				  $packagingWeight = 0
+				  $packagingWeight = define_packaging_weight($itemString)
+				  
+				  If $packaging="" or $packagingWeight=0 Then
+					 $proceed = False
+					 $body &= "Item String: "&$itemString& " Packaging Missing" & @CR
+				  EndIf
+				  
+				  ;; total weight item weight * qty + packaging weight
+					$weightTotal=0
+
+				  
+				  
+				  If $proceed = True Then
+
+					 If $arraySize > 1 Then
+						For $k=0 To UBound($itemArray)-1
+							If $itemArray[$k][0] <> "" Then
+								$weightTotal+= $itemArray[$k][3] * $itemArray[$k][2]
+							EndIf
+						Next
+						
+					 Else
+						If $itemArray[0][0] <> "" Then
+							$weightTotal = $itemArray[0][3] * $itemArray[0][2]
+						EndIf
+					 EndIf
+					 
+					 $weightTotal+= $packagingWeight
+
+				EndIf
+		
+		
+					$start=0
+					
+				If $proceed = True And $weightTotal <> 0 Then
+
+				$oLinks = _IELinkGetCollection($oIE)
+				For $oLink In $oLinks	
+
+					If StringInStr($oLink.innerText, $name) <> 0 And StringInStr($oLink.innerText, "Details") <> 0  Then
+						_IEAction($oLink, "click")
+						ExitLoop
+					EndIf
+				Next
+
+				;_ArrayDisplay($itemArray)
+
+					$addressName=""
+					$address=""
+					
+					If addressChangeExist($transactionid) = True Then
+						$address = addressChange($transactionid)
+						$addressName = addressChangeName($transactionid)
+					
+					Else
+						$addressTable = _IETableGetCollection ($oIE, 2)
+						$addressTableData = _IETableWriteToArray ($addressTable, True)
+
+						$addressSplit = $addressTableData[1][1]
+									
+						;MsgBox(0,"test",$data)
+						$addressSplit = StringSplit ($addressSplit, @LF)
+						;_ArrayDisplay($addressSplit)
+								
+									
+						For $i = 1 To UBound($addressSplit)-1
+						;MsgBox(0,"$data[$i] = $open_order_names[$w]", $data[$i] &" - "& $open_order_names[$w])
+							If StringRegExp($addressSplit[$i], "Protection address") = 1 OR StringRegExp($addressSplit[$i], "Ship to address") = 1 OR StringRegExp($addressSplit[$i], "Tips to sell securely") = 1 Then
+							;MsgBox(0, "test", StringRegExp($data[$i], "Tips to sell securely"))
+										
+								$start = $i+1
+									
+							EndIf
+						Next
+						
+						;_ArrayDisplay($addressSplit)
+						$domestic = False
+						
+						For $i=$start To UBound($addressSplit)-1
+							
+							If StringInStr($addressSplit[$i], "United States") <> 0 Then
+								$domestic = True
+							ElseIf StringInStr($addressSplit[$i], "Confirmed") = 0 Then
+								$address &= StringReplace ($addressSplit[$i], @CR, "")&@CR		
+							EndIf
+
+							If $i=$start Then
+								$addressName = StringReplace ($addressSplit[$i], @CR, "")
+							EndIf
+
+
+						Next
+
+						;MsgBox(0,"address",$address)
+
+						$addressNameSplit = StringSplit($addressName, " ",2)
+
+							If UBound($addressNameSplit) > 2 then
+								$addressName=""
+								;MsgBox(0,"test",UBound($addressNameSplit)-1)
+								For $k=0 To UBound($addressNameSplit)-1
+									
+									If $addressNameSplit[$k] <> "" Then
+
+										If $addressName <> "" Then
+											$addressName&=" "&$addressNameSplit[$k]
+										Else
+											$addressName&=$addressNameSplit[$k]
+										EndIf
+			
+									EndIf
+								Next
+								
+							EndIf
+					EndIf
+						;MsgBox(0,$addressName,$address)
+						;MsgBox(0,"$weightTotal",$weightTotal)
+						;_ArrayDisplay($itemArray)
+
+							If $acct = 1 Then
+								$company = "EMD Store"
+							ElseIf $acct = 2 Then
+								$company = "EMD Merchant"
+							ElseIf $acct = 3 Then
+								$company = "EMDCELL"
+							Else
+								$body &= "unknown paypal account number $acct= " & $acct&@CR
+								$noMatch = True
+							EndIf
+
+						
+						If $domestic = True Then
+							
+
+							
+							If $company <> "" Then
+								If $weightTotal < 13 Or $weightTotal = 13 Then									
+									printFirstClass($address, $weightTotal, $transactionid, $company, $packaging)
+								ElseIf $weightTotal > 13
+									
+									printPriority($address, $weightTotal, $transactionid, $company, $packaging)
+								Else
+									$body &= "Paypal print shipping label total weight unknown"
+									$noMatch = True
+								EndIf
+							
+							
+							
+							EndIf
+							;paypalPrintDomesticLabel()
+						
+						ElseIf StringInStr($address, "Puerto Rico") <> 0 Then
+						
+							;_Log($timestamp & @TAB & "Puerto Rico Order Exist" & @CR)	
+							$body &= "Puerto Rico Order Exist"
+							$noMatch = True
+						Else
+							;;skip
+							;$noMatch = True
+							
+							;; international shipping
+							If $company <> "" Then
+								
+								printInternationalFirstClassPayPal($address, $weightTotal, $transactionid, $company, $packaging, $itemArray)
+
+							EndIf
+						
+						EndIf
+							
+						Sleep(1700)
+						$trackingID=retrieveTrackingID($addressName)
+						Sleep(1700)
+						paypalMultipleOrdersAddTrackingPrintPacking($oIE, $addressName, $trackingID, $orderNumber, $itemArray, $packagingType, $domestic)
+						Sleep(1700)
+							
+							
+						inventoryUpdate($itemArray, 7, 2)
+							
+				
+						
+
+						
+				EndIf ;; end of $proceed = True And $weightTotal <> 0			
+
+
+EndFunc
+
+
+
 Func paypalOrders($oIE, $acct)
    
    dim $array, $itemArray[10][8] ;; itemNum_itemName_qty_price
@@ -1278,6 +1915,7 @@ Func paypalOrders($oIE, $acct)
    Local $emptyFound=False, $packagingType = "", $itemWeight = 0, $itemSKU = "", $itemType = ""
    Local $itemString="", $count=0, $arraySize=0, $packaging = "", $packagingWeight = 0, $weightTotal=0, $noMatch = False, $addressName=""
    Local $proceed = True, $approval=False, $finish = False, $totalQty=0, $skipTracking=False
+   Local $sameName="", $flagnote=""
    _IENavigate($oIE, "https://www.paypal.com/us/cgi-bin/webscr?cmd=_account&nav=0")
 	  
    ;;Get fast access to your PayPal cash
@@ -1337,11 +1975,11 @@ For $reload=0 To 11
 	Next
 
 
-	_ArrayDisplay($rawOrderTable)
+	;_ArrayDisplay($rawOrderTable)
 	
 	$rawOrderTable =checkPaypalDup($rawOrderTable)
 	
-	_ArrayDisplay($rawOrderTable)
+	;_ArrayDisplay($rawOrderTable)
 
 ;col 0 - select record 1
 ;col 1 - 0
@@ -1367,49 +2005,69 @@ For $reload=0 To 11
 	
 	
 	
-	
-	
 	For $w=0 to UBound($rawOrderTable)-1
-		If ($rawOrderTable <> "") Then
-			
-			$proceed = True
-			;;;; Use the names in open order names array and find the detail button and click to the detail order page
-			$oTR = _IETagNameGetCollection($rawTable, "TR", $w) ; reference to TR tag
-			$oTD = _IETagNameGetCollection($oTR, "TD", 7) ; reference to TD tag
-			$detail =  _IEPropertyGet($oTD, "innertext")
-
-			$oLinks = _IELinkGetCollection($oIE)
-			For $oLink In $oLinks			
-				If StringInStr($oLink.innerText, $rawOrderTable[$w][5]) <> 0 and StringInStr($oLink.innerText, "Details") <> 0 Then
-					;msgbox(0,"FOUND","innerText = " & $oLink.innerText)
-					;MsgBox(0,"$open_order_names[$i]",$open_order_names[$w])
-					_IEAction($oLink, "click")
-					ExitLoop
-				EndIf
-			Next
 		
-		_IELoadWait($oIE)
-
-			$transTable = _IETableGetCollection ($oIE, 3)
-			$transTableData = _IETableWriteToArray ($transTable, True)
-						
-			;_ArrayDisplay($transTableData)
-			$transSplit = StringSplit($transTableData[1][0], "#", 2)
-			;_ArrayDisplay($transSplit)
-			$transactionid = StringStripWS($transSplit[1], 8)
-			$transactionid = StringTrimRight($transactionid, 1)
-
-			If StringInStr($rawOrderTable[$w][1], "same_name") <> 0 Then
-				;MsgBox(0,"$rawOrderTable[$w][1]",$rawOrderTable[$w][1])
-				$body &= "Paypal "&$acct&" same person with different order "&$rawOrderTable[$w][5]&@CR 
-				$proceed = False
+		$sameOrderQty=0
+		
+		If ($rawOrderTable[$w][0] <> "") Or  ($rawOrderTable[$w][0] <> "done") Then
+			If StringInStr ($rawOrderTable[$w][1], "samename") <> 0 Then
 				
-			ElseIf define_skip($transactionid) = True Then
-				$body &= "Paypal "&$acct&" transaction id: "&$transactionid&" skipped"&@CR
-				$proceed = False
+				$sameNameSplit=StringSplit($rawOrderTable[$w][1], "_")
+				
+				$sameName = $sameNameSplit[2]
+				
+				;MsgBox(0, "samename", $sameName)
+
+				For $z=0 To UBound($rawOrderTable)-1 
+					If StringInStr($rawOrderTable[$z][5], $sameName) <> 0   Then
+						$sameOrderQty+=1
+						$rawOrderTable[$z][0]="done"
+					EndIf
+					
+					If $rawOrderTable[$z][3] <> "" And $rawOrderTable[$z][3] <> " " Then
+						$flagnote &= $rawOrderTable[$z][3] & " | "
+					EndIf
+				Next	
+
+				;MsgBox(0, "$sameOrderQty", $sameOrderQty)
+				paypayOrdersProceed($oIE, $sameName, $sameOrderQty, $flagnote)
+				
 				
 
-			EndIf
+			Else
+				$proceed = True
+				;;;; Use the names in open order names array and find the detail button and click to the detail order page
+				$oTR = _IETagNameGetCollection($rawTable, "TR", $w) ; reference to TR tag
+				$oTD = _IETagNameGetCollection($oTR, "TD", 7) ; reference to TD tag
+				$detail =  _IEPropertyGet($oTD, "innertext")
+
+				$oLinks = _IELinkGetCollection($oIE)
+				For $oLink In $oLinks			
+					If StringInStr($oLink.innerText, $rawOrderTable[$w][5]) <> 0 and StringInStr($oLink.innerText, "Details") <> 0 Then
+						;msgbox(0,"FOUND","innerText = " & $oLink.innerText)
+						;MsgBox(0,"$open_order_names[$i]",$open_order_names[$w])
+						_IEAction($oLink, "click")
+						ExitLoop
+					EndIf
+				Next
+			
+			_IELoadWait($oIE)
+
+				$transTable = _IETableGetCollection ($oIE, 3)
+				$transTableData = _IETableWriteToArray ($transTable, True)
+							
+				;_ArrayDisplay($transTableData)
+				$transSplit = StringSplit($transTableData[1][0], "#", 2)
+				;_ArrayDisplay($transSplit)
+				$transactionid = StringStripWS($transSplit[1], 8)
+				$transactionid = StringTrimRight($transactionid, 1)
+
+				If define_skip($transactionid) = True Then
+					$body &= "Paypal "&$acct&" transaction id: "&$transactionid&" skipped"&@CR
+					$proceed = False
+					
+
+				EndIf
 		
 		;MsgBox(0,"$proceed",$proceed)
 		;MsgBox(0,"$transactionid",$transactionid)
@@ -1704,7 +2362,9 @@ For $reload=0 To 11
 
 				EndIf
 
-					
+
+;;multiple orders end function paypalOrderProceeds End
+
 					$start=0
 					
 					If $emptyFound = False And $weightTotal <> 0 Then
@@ -1984,6 +2644,8 @@ For $reload=0 To 11
 	
 		EndIf ;; end of if proceed is not false
 	
+		
+			EndIf
 		EndIf ;; $rawOrderTable is not empty
 
 	  _IELinkClickByText($oIE, "History")
@@ -4789,42 +5451,6 @@ Func Login($oIE, $usern="buy.com@emdcell.com", $passw="cell13579", $form="aspnet
 
 EndFunc
 
-Func checkPaypalDup($array)
-	
-	
-	
-	Local $i = 1
-	Local $end = UBound($array)-1
-	Local $same_name = "same_name"
-	;Local $same_addy = 2
-	
-	
-	While $i < $end
-		Local $j = $i+1
-			While $j < $end
-				if $array[$i][5] = $array[$j][5] Then
-					;If $array[$i][4] <> "Update From" And $array[$j][4] <> "Update From" Then
-					If $array[$i][4] <> "Update From" And $array[$j][4] <> "Update From" And StringInStr($array[$j][8], "Print shipping label") <> 0  And StringInStr($array[$i][8], "Print shipping label") <> 0 Then
-					
-					;If StringInStr($array[$i][8], "Print shipping label") <> 0 AND StringInStr($array[$j][8], "Print shipping label") <> 0 Then
-					$array[$i][1] = $same_name
-					$array[$j][1] = $same_name
-					EndIf
-				EndIf	
-				
-				$j += 1
-			WEnd	
-		
-		$i += 1
-	WEnd
-
-;_ArrayDisplay($array)
-
-	Return $array
-
-
-EndFunc
-
 
 					
 Func _WaitForWinTitle($wintitle, $wincontent="")
@@ -4994,9 +5620,6 @@ Func BuyComCheckForDuplicate($array)
 	
 EndFunc
 
-
-
-
 Func amazonNameDupCheck($array)
 	
 	Local $same_name = 1
@@ -5016,6 +5639,29 @@ Func amazonNameDupCheck($array)
 	Next
 	
 	Return $array
+EndFunc
+
+Func checkPaypalDup($array)
+	
+	For $i=0 To UBound($array)-1
+		If UBound($array) > 1 And $array[$i][1] = 0 Then
+			For $j=$i+1 To UBound($array)-1
+				If $array[$i][5] = $array[$j][5] Then
+					If $array[$i][4] <> "Update From" And $array[$j][4] <> "Update From" And StringInStr($array[$j][8], "Print shipping label") <> 0  And StringInStr($array[$i][8], "Print shipping label") <> 0 Then
+						$array[$i][1] = "samename_"&$array[$i][5]
+						$array[$j][1] = "samename_"&$array[$i][5]
+						$j+=1
+					EndIf
+				EndIf
+			Next
+		EndIf
+	Next
+	
+
+
+	Return $array
+
+
 EndFunc
 
 Func inventoryUpdateDB($itemSKU, $itemQty)
