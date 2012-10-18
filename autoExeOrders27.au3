@@ -1278,6 +1278,8 @@ EndFunc
 Func retrieveTrackingID($name)
 	
 	Local $bodyTxt="", $trackingID=""
+	Local $addressSplit="", $address="", $domestic=False, $company="", $transactionid="", $transSplit=""
+	
 	
 	WinActivate("Stamps.com Pro")
 	ControlClick("Stamps.com Pro", "", 32551)
@@ -1328,7 +1330,7 @@ Func retrieveTrackingID($name)
 	
 EndFunc
 
-Func paypalMultipleOrdersAddTrackingPrintPacking($oIE, $name, $trackingID, $multipleOrders, $itemArray, $packagingType, $domestic=True)
+Func paypalMultipleOrdersAddTrackingPrintPacking($oIE, $name, $trackingID, $multipleOrders, $itemArray, $packaging, $domestic=True)
 	
 
 	
@@ -1425,7 +1427,7 @@ Func paypalMultipleOrdersAddTrackingPrintPacking($oIE, $name, $trackingID, $mult
 
 EndFunc
 
-Func paypayOrdersProceed($oIE, $name, $orderNumber, $flagnote="")
+Func paypayOrdersProceed($oIE, $name, $orderNumber, $acct, $flagnote="")
 
 	Local $array, $itemArray[10][8] ;; itemNum_itemName_qty_price
 	Local $itemCount=0, $trackingID=""
@@ -1766,6 +1768,9 @@ Func paypayOrdersProceed($oIE, $name, $orderNumber, $flagnote="")
 
 				;_ArrayDisplay($itemArray)
 
+				_IELoadWait($oIE)
+				Sleep(1500)
+
 					$addressName=""
 					$address=""
 					
@@ -1774,8 +1779,11 @@ Func paypayOrdersProceed($oIE, $name, $orderNumber, $flagnote="")
 						$addressName = addressChangeName($transactionid)
 					
 					Else
+					
 						$addressTable = _IETableGetCollection ($oIE, 2)
 						$addressTableData = _IETableWriteToArray ($addressTable, True)
+
+						;_ArrayDisplay($addressTableData)
 
 						$addressSplit = $addressTableData[1][1]
 									
@@ -2030,7 +2038,7 @@ For $reload=0 To 11
 				Next	
 
 				;MsgBox(0, "$sameOrderQty", $sameOrderQty)
-				paypayOrdersProceed($oIE, $sameName, $sameOrderQty, $flagnote)
+				paypayOrdersProceed($oIE, $sameName, $sameOrderQty, $acct, $flagnote)
 				
 				
 
